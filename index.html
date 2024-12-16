@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>量子シミュレータ</title>
+    <style>
+      html,
+      body {
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        font-family: "Segoe UI", "Yu Gothic UI", sans-serif;
+      }
+      #renderCanvas {
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+      }
+      #parameterPanel {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        width: 300px;
+        max-height: calc(100vh - 40px);
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(10px);
+        border-radius: 10px;
+        padding: 15px;
+        color: white;
+        overflow-y: auto;
+        z-index: 1000;
+        transition: transform 0.3s ease-out;
+        transform: translateX(0);
+      }
+      #parameterPanel.hidden {
+        transform: translateX(calc(100% + 5px));
+      }
+      #toggleButton {
+        position: absolute;
+        left: -1px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.8);
+        width: 20px;
+        height: 40px;
+        cursor: pointer;
+        border-radius: 4px 0 0 4px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+      }
+      #toggleButton:hover {
+        background: transparent;
+      }
+      #parameterPanel.hidden #toggleButton {
+        border-radius: 0 4px 4px 0;
+      }
+      .parameter-group {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 15px;
+      }
+      .group-title {
+        font-size: 16px;
+        margin: 0 0 12px 0;
+        color: #00ff00;
+      }
+      .parameter-row {
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .parameter-label {
+        flex: 1;
+        font-size: 14px;
+      }
+      .parameter-value {
+        width: 50px;
+        text-align: right;
+        margin-left: 10px;
+        font-size: 14px;
+        font-family: monospace;
+      }
+      .slider-container {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      input[type="range"] {
+        flex: 1;
+        height: 4px;
+        -webkit-appearance: none;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 2px;
+        outline: none;
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 12px;
+        height: 12px;
+        background: #00ff00;
+        border-radius: 50%;
+        cursor: pointer;
+      }
+      input[type="range"]::-moz-range-thumb {
+        width: 12px;
+        height: 12px;
+        background: #00ff00;
+        border-radius: 50%;
+        cursor: pointer;
+        border: none;
+      }
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.4);
+      }
+      .preset-button {
+        background: rgba(0, 255, 0, 0.2);
+        border: 1px solid #00ff00;
+        color: #fff;
+        padding: 5px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin: 0 5px 5px 0;
+        transition: all 0.3s;
+      }
+      .preset-button:hover {
+        background: rgba(0, 255, 0, 0.4);
+      }
+      .parameter-input {
+        width: 60px;
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(0, 255, 0, 0.3);
+        color: #fff;
+        padding: 2px 5px;
+        border-radius: 3px;
+        font-family: monospace;
+        margin-left: 5px;
+      }
+      .reset-button {
+        background: rgba(255, 0, 0, 0.2);
+        border: 1px solid #ff0000;
+        color: #fff;
+        padding: 2px 8px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 12px;
+        margin-left: 5px;
+      }
+      .group-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+      }
+      .group-header .collapse-icon {
+        color: #00ff00;
+        transition: transform 0.3s;
+      }
+      .group-header.collapsed .collapse-icon {
+        transform: rotate(-90deg);
+      }
+      .parameter-group .content {
+        transition: max-height 0.3s ease-out;
+        overflow: hidden;
+      }
+      .parameter-group.collapsed .content {
+        max-height: 0;
+      }
+      .tooltip {
+        position: relative;
+        display: inline-block;
+      }
+      .tooltip .tooltip-text {
+        visibility: hidden;
+        width: 200px;
+        background-color: rgba(0, 0, 0, 0.9);
+        color: #fff;
+        text-align: center;
+        border-radius: 6px;
+        padding: 5px;
+        position: absolute;
+        z-index: 1;
+        bottom: 125%;
+        left: 50%;
+        transform: translateX(-50%);
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      .tooltip:hover .tooltip-text {
+        visibility: visible;
+        opacity: 1;
+      }
+      .parameter-group.red-type {
+        border: 1px solid rgba(255, 50, 50, 0.5);
+        background: rgba(255, 50, 50, 0.1);
+      }
+      .parameter-group.green-type {
+        border: 1px solid rgba(50, 255, 50, 0.5);
+        background: rgba(50, 255, 50, 0.1);
+      }
+      .parameter-group.blue-type {
+        border: 1px solid rgba(50, 50, 255, 0.5);
+        background: rgba(50, 50, 255, 0.1);
+      }
+      .parameter-group.red-type .group-title {
+        color: #ff5050;
+      }
+      .parameter-group.green-type .group-title {
+        color: #50ff50;
+      }
+      .parameter-group.blue-type .group-title {
+        color: #5050ff;
+      }
+      .parameter-group.red-type input[type="range"]::-webkit-slider-thumb {
+        background: #ff5050;
+      }
+      .parameter-group.green-type input[type="range"]::-webkit-slider-thumb {
+        background: #50ff50;
+      }
+      .parameter-group.blue-type input[type="range"]::-webkit-slider-thumb {
+        background: #5050ff;
+      }
+      .parameter-group.red-type input[type="range"]::-moz-range-thumb {
+        background: #ff5050;
+      }
+      .parameter-group.green-type input[type="range"]::-moz-range-thumb {
+        background: #50ff50;
+      }
+      .parameter-group.blue-type input[type="range"]::-moz-range-thumb {
+        background: #5050ff;
+      }
+      .parameter-group.red-type
+        .parameter-row:nth-child(2)
+        input[type="range"]::-webkit-slider-thumb {
+        background: #50ff50;
+      }
+      .parameter-group.red-type
+        .parameter-row:nth-child(3)
+        input[type="range"]::-webkit-slider-thumb {
+        background: #5050ff;
+      }
+
+      .parameter-group.green-type
+        .parameter-row:nth-child(2)
+        input[type="range"]::-webkit-slider-thumb {
+        background: #ff5050;
+      }
+      .parameter-group.green-type
+        .parameter-row:nth-child(3)
+        input[type="range"]::-webkit-slider-thumb {
+        background: #5050ff;
+      }
+
+      .parameter-group.blue-type
+        .parameter-row:nth-child(2)
+        input[type="range"]::-webkit-slider-thumb {
+        background: #ff5050;
+      }
+      .parameter-group.blue-type
+        .parameter-row:nth-child(3)
+        input[type="range"]::-webkit-slider-thumb {
+        background: #50ff50;
+      }
+
+      .parameter-group.red-type .parameter-row:nth-child(2) input[type="range"]::-moz-range-thumb {
+        background: #50ff50;
+      }
+      .parameter-group.red-type .parameter-row:nth-child(3) input[type="range"]::-moz-range-thumb {
+        background: #5050ff;
+      }
+
+      .parameter-group.green-type
+        .parameter-row:nth-child(2)
+        input[type="range"]::-moz-range-thumb {
+        background: #ff5050;
+      }
+      .parameter-group.green-type
+        .parameter-row:nth-child(3)
+        input[type="range"]::-moz-range-thumb {
+        background: #5050ff;
+      }
+
+      .parameter-group.blue-type .parameter-row:nth-child(2) input[type="range"]::-moz-range-thumb {
+        background: #ff5050;
+      }
+      .parameter-group.blue-type .parameter-row:nth-child(3) input[type="range"]::-moz-range-thumb {
+        background: #50ff50;
+      }
+    </style>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+  </head>
+  <body>
+    <canvas id="renderCanvas"></canvas>
+
+    <div id="parameterPanel">
+      <button id="toggleButton">◀</button>
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px">
+        <button id="randomizeButton" class="preset-button" style="white-space: nowrap">
+          ランダム生成
+        </button>
+        <div class="parameter-row" style="margin: 0; flex: 0 0 auto">
+          <label class="parameter-label" style="white-space: nowrap; margin-right: 5px">音量</label>
+          <input
+            type="range"
+            id="volumeSlider"
+            min="0"
+            max="0.5"
+            step="0.01"
+            value="0.1"
+            style="width: 100px"
+          />
+        </div>
+      </div>
+      <div class="parameter-group" id="particleParams">
+        <h3 class="group-title">パーティクル設定</h3>
+      </div>
+      <div class="parameter-group" id="globalParams">
+        <h3 class="group-title">グローバル設定</h3>
+      </div>
+    </div>
+
+    <script>
+      // 定数とパラメーター設定
+      const CONFIG = {
+        PARTICLE: {
+          COUNT: 300,
+          BASE_SIZE: 1,
+          SIZE_VARIANCE: 0.1,
+          SEGMENTS: 8,
+          BOUND: 100,
+          FORCE_MAGNITUDE: 0.01,
+          VELOCITY_DECAY: 0.98,
+          RANDOM_FORCE: 0.04,
+          MIN_INTERACTION_DISTANCE: 0.1,
+          MAX_INTERACTION_DISTANCE: 50,
+          STRENGTH_FACTOR_POWER: 1.2,
+        },
+        AUDIO: {
+          FREQUENCIES: {
+            red: 10,    // A (ラ)
+            green: 40,  // E (ミ)
+            blue: 100,   // A (ラ) オクターブ上
+          },
+          MAX_VOLUME: 0.1,
+          SONIFICATION: {
+            FREQUENCY_RANGE: 100,
+            ENERGY_TO_FREQUENCY: 3.0,
+            ENERGY_TO_VOLUME: 1.0,
+          },
+        },
+        SCENE: {
+          BACKGROUND_COLOR: new BABYLON.Color3(0, 0, 0.1),
+        },
+      };
+
+      const GUI_CONFIG = {
+        panel: {
+          width: "300px",
+          height: "80%",
+          background: "rgba(0,0,0,0.5)",
+          paddingTop: "10px",
+        },
+        header: {
+          height: "30px",
+          color: "#ffffff",
+          fontSize: "20px",
+        },
+        group: {
+          background: "rgba(0,0,0,0.3)",
+          padding: "10px",
+          margin: "5px",
+        },
+        slider: {
+          height: "20px",
+          width: "200px",
+          color: "#00ff00",
+          background: "#333333",
+          barColor: "white",
+        },
+      };
+
+      const PARTICLE_TYPES = {
+        red: {
+          color: new BABYLON.Color3(1, 0.2, 0.2),
+          interactions: {
+            red: { base: Math.random() * 30 + 10, range: 10 },
+            green: { base: Math.random() * 30 + 10, range: 10 },
+            blue: { base: Math.random() * 30 + 10, range: 10 },
+          },
+        },
+        green: {
+          color: new BABYLON.Color3(0.2, 1, 0.2),
+          interactions: {
+            green: { base: Math.random() * 30 + 10, range: 10 },
+            red: { base: Math.random() * 30 + 10, range: 10 },
+            blue: { base: Math.random() * 30 + 10, range: 10 },
+          },
+        },
+        blue: {
+          color: new BABYLON.Color3(0.2, 0.2, 1),
+          interactions: {
+            blue: { base: Math.random() * 30 + 10, range: 10 },
+            red: { base: Math.random() * 30 + 10, range: 10 },
+            green: { base: Math.random() * 30 + 10, range: 10 },
+          },
+        },
+      };
+
+      // オートマネージャークラス
+      class AudioManager {
+        constructor() {
+          this.context = null;
+          this.oscillators = {};
+          this.gainNodes = {};
+        }
+
+        init() {
+          this.context = new AudioContext();
+          Object.keys(PARTICLE_TYPES).forEach((type) => {
+            const oscillator = this.context.createOscillator();
+            const gainNode = this.context.createGain();
+
+            oscillator.type = "sine";
+            oscillator.frequency.value = CONFIG.AUDIO.FREQUENCIES[type];
+            gainNode.gain.value = 0.0;
+
+            oscillator.connect(gainNode).connect(this.context.destination);
+            oscillator.start();
+
+            this.oscillators[type] = oscillator;
+            this.gainNodes[type] = gainNode;
+          });
+        }
+
+        updateSound(type, activity, maxActivity) {
+          if (this.context?.state !== "running") return;
+
+          const baseFreq = CONFIG.AUDIO.FREQUENCIES[type];
+          const freq = this.mapToFrequency(activity, 0, maxActivity, baseFreq);
+          const vol = this.mapToVolume(activity, maxActivity);
+
+          this.oscillators[type].frequency.setValueAtTime(freq, this.context.currentTime);
+          this.gainNodes[type].gain.setValueAtTime(vol, this.context.currentTime);
+        }
+
+        mapToFrequency(value, min, max, baseFreq) {
+          const normalized = (value - min) / (max - min);
+          return (
+            baseFreq +
+            normalized *
+              CONFIG.AUDIO.SONIFICATION.FREQUENCY_RANGE *
+              CONFIG.AUDIO.SONIFICATION.ENERGY_TO_FREQUENCY
+          );
+        }
+
+        mapToVolume(activity, maxActivity) {
+          return Math.min(
+            (activity / maxActivity) *
+              CONFIG.AUDIO.MAX_VOLUME *
+              CONFIG.AUDIO.SONIFICATION.ENERGY_TO_VOLUME,
+            CONFIG.AUDIO.MAX_VOLUME
+          );
+        }
+
+        setMasterVolume(value) {
+          CONFIG.AUDIO.MAX_VOLUME = value;
+          // 現在の音量を即座に更新
+          Object.values(this.gainNodes).forEach((gainNode) => {
+            gainNode.gain.value *= value;
+          });
+        }
+      }
+
+      // パーティクルシステムクラス
+      class ParticleSystem {
+        constructor(scene) {
+          this.scene = scene;
+          this.particles = [];
+          this.glowLayer = new BABYLON.GlowLayer("glow", scene, {
+            mainTextureFixedSize: 256,
+            blurKernelSize: 64,
+          });
+        }
+
+        createParticles() {
+          for (let i = 0; i < CONFIG.PARTICLE.COUNT; i++) {
+            const typeKeys = Object.keys(PARTICLE_TYPES);
+            const typeIndex = Math.floor(i / (CONFIG.PARTICLE.COUNT / typeKeys.length));
+            const typeName = typeKeys[typeIndex];
+            const typeConfig = PARTICLE_TYPES[typeName];
+
+            const particle = this.createParticleMesh(i, typeName, typeConfig);
+            this.particles.push(particle);
+          }
+        }
+
+        createParticleMesh(index, type, config) {
+          const particle = BABYLON.MeshBuilder.CreateSphere(
+            `particle${index}`,
+            {
+              diameter: CONFIG.PARTICLE.BASE_SIZE + Math.random() * CONFIG.PARTICLE.SIZE_VARIANCE,
+              segments: CONFIG.PARTICLE.SEGMENTS,
+            },
+            this.scene
+          );
+
+          const material = new BABYLON.StandardMaterial(`material${index}`, this.scene);
+          material.emissiveColor = config.color;
+          material.specularColor = config.color;
+          material.ambientColor = config.color;
+          material.diffuseColor = BABYLON.Color3.Black();
+          material.alpha = 0.9;
+
+          particle.material = material;
+          particle.type = type;
+          particle.position = this.getRandomPosition();
+          particle.velocity = this.getRandomVelocity();
+
+          this.glowLayer.addIncludedOnlyMesh(particle);
+
+          return particle;
+        }
+
+        getRandomPosition() {
+          return new BABYLON.Vector3(
+            (Math.random() - 0.5) * CONFIG.PARTICLE.BOUND * 0.8,
+            (Math.random() - 0.5) * CONFIG.PARTICLE.BOUND * 0.8,
+            (Math.random() - 0.5) * CONFIG.PARTICLE.BOUND * 0.8
+          );
+        }
+
+        getRandomVelocity() {
+          return new BABYLON.Vector3(
+            (Math.random() - 0.5) * 0.2,
+            (Math.random() - 0.5) * 0.2,
+            (Math.random() - 0.5) * 0.2
+          );
+        }
+
+        update() {
+          const activityLevels = this.updateParticles();
+          return this.calculateAverageActivity(activityLevels);
+        }
+
+        updateParticles() {
+          const activityLevels = { red: 0, green: 0, blue: 0 };
+
+          for (let i = 0; i < this.particles.length; i++) {
+            const particle = this.particles[i];
+
+            this.calculateParticleInteractions(particle, i);
+            this.updateParticlePosition(particle);
+            this.checkBounds(particle);
+
+            activityLevels[particle.type] += particle.velocity.length();
+          }
+
+          return activityLevels;
+        }
+
+        calculateParticleInteractions(particle, currentIndex) {
+          for (let j = currentIndex + 1; j < this.particles.length; j++) {
+            const other = this.particles[j];
+            const direction = other.position.subtract(particle.position);
+            const distance = direction.length();
+
+            if (
+              distance > CONFIG.PARTICLE.MIN_INTERACTION_DISTANCE &&
+              distance < CONFIG.PARTICLE.MAX_INTERACTION_DISTANCE
+            ) {
+              const force = direction.normalize();
+              const interactions = PARTICLE_TYPES[particle.type].interactions[other.type];
+
+              let appliedForce = this.calculateForce(distance, interactions);
+              const strengthFactor = Math.pow(
+                1 - distance / CONFIG.PARTICLE.MAX_INTERACTION_DISTANCE,
+                CONFIG.PARTICLE.STRENGTH_FACTOR_POWER
+              );
+              force.scaleInPlace(appliedForce * strengthFactor);
+
+              particle.velocity.addInPlace(force);
+              other.velocity.addInPlace(force.scale(-1));
+            }
+          }
+
+          // ランダムな動きを追加
+          particle.velocity.addInPlace(this.getRandomForce());
+          particle.velocity.scaleInPlace(CONFIG.PARTICLE.VELOCITY_DECAY);
+        }
+
+        calculateForce(distance, interaction) {
+          if (!interaction) return 0;
+
+          const { base, range } = interaction;
+          const attractThreshold = base + range;
+
+          if (distance < attractThreshold) {
+            if (distance > base) {
+              // 引力が働く範囲（base < distance < base + range）
+              const forceMagnitude =
+                CONFIG.PARTICLE.FORCE_MAGNITUDE * (1 - (distance - base) / range);
+              return forceMagnitude;
+            } else {
+              // 反発力が働く範囲（distance < base）
+              const forceMagnitude = CONFIG.PARTICLE.FORCE_MAGNITUDE * (1 - distance / base);
+              return -forceMagnitude;
+            }
+          }
+
+          return 0; // 相互範囲外
+        }
+
+        getRandomForce() {
+          return new BABYLON.Vector3(
+            (Math.random() - 0.5) * CONFIG.PARTICLE.RANDOM_FORCE,
+            (Math.random() - 0.5) * CONFIG.PARTICLE.RANDOM_FORCE,
+            (Math.random() - 0.5) * CONFIG.PARTICLE.RANDOM_FORCE
+          );
+        }
+
+        updateParticlePosition(particle) {
+          particle.position.addInPlace(particle.velocity);
+        }
+
+        checkBounds(particle) {
+          const bound = CONFIG.PARTICLE.BOUND;
+          ["x", "y", "z"].forEach((axis) => {
+            if (Math.abs(particle.position[axis]) > bound) {
+              particle.velocity[axis] *= -1;
+              particle.position[axis] = Math.sign(particle.position[axis]) * bound;
+            }
+          });
+        }
+
+        calculateAverageActivity(activityLevels) {
+          const result = {};
+          Object.entries(activityLevels).forEach(([type, totalActivity]) => {
+            const particlesOfType = this.particles.filter((p) => p.type === type);
+            const count = particlesOfType.length;
+            result[type] = {
+              average: totalActivity / count,
+              max: Math.max(...particlesOfType.map((p) => p.velocity.length())),
+            };
+          });
+          return result;
+        }
+
+        updateParticleSizes() {
+          this.particles.forEach((particle, index) => {
+            const newSize =
+              CONFIG.PARTICLE.BASE_SIZE + Math.random() * CONFIG.PARTICLE.SIZE_VARIANCE;
+            particle.scaling = new BABYLON.Vector3(newSize, newSize, newSize);
+          });
+        }
+      }
+
+      // メインアプリケーションクラス
+      class ParticleLifeApp {
+        constructor() {
+          this.canvas = document.getElementById("renderCanvas");
+          this.engine = new BABYLON.Engine(this.canvas, true);
+          this.audioManager = new AudioManager();
+          this.scene = this.createScene();
+          this.particleSystem = new ParticleSystem(this.scene);
+
+          this.init();
+        }
+
+        init() {
+          this.audioManager.init();
+          this.particleSystem.createParticles();
+          this.setupEventListeners();
+          this.startRenderLoop();
+        }
+
+        createScene() {
+          const scene = new BABYLON.Scene(this.engine);
+          scene.clearColor = CONFIG.SCENE.BACKGROUND_COLOR;
+
+          const camera = new BABYLON.ArcRotateCamera(
+            "camera",
+            0,
+            Math.PI / 2,
+            100,
+            BABYLON.Vector3.Zero(),
+            scene
+          );
+          camera.attachControl(this.canvas, true);
+
+          const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+          light.intensity = 0.7;
+
+          this.createGUI();
+
+          return scene;
+        }
+
+        setupEventListeners() {
+          this.canvas.addEventListener("click", () => {
+            if (this.audioManager.context?.state === "suspended") {
+              this.audioManager.context.resume();
+            }
+          });
+
+          window.addEventListener("resize", () => {
+            this.engine.resize();
+          });
+
+          // パネルの表示/非表示を切り替えるトグルボタンの制御を追加
+          const toggleButton = document.getElementById("toggleButton");
+          const panel = document.getElementById("parameterPanel");
+
+          toggleButton.addEventListener("click", () => {
+            panel.classList.toggle("hidden");
+            toggleButton.textContent = panel.classList.contains("hidden") ?  "◀" : "▶";
+          });
+        }
+
+        startRenderLoop() {
+          this.engine.runRenderLoop(() => {
+            const activityLevels = this.particleSystem.update();
+            this.updateAudio(activityLevels);
+            this.scene.render();
+          });
+        }
+
+        updateAudio(activityLevels) {
+          Object.entries(activityLevels).forEach(([type, activity]) => {
+            this.audioManager.updateSound(type, activity.average, activity.max);
+          });
+        }
+
+        createGUI() {
+          const globalParams = document.getElementById("globalParams");
+          const particleParams = document.getElementById("particleParams");
+
+          // グローバルパラメーターの作成
+          this.createParameterGroup(globalParams, "グローバル設定", {
+            パーティクル数: {
+              min: 50,
+              max: 1000,
+              current: CONFIG.PARTICLE.COUNT,
+              step: 1, // 整数値のみ
+              tooltip: "シミュレーション内のパーティクルの総数",
+              onChange: (value) => {
+                CONFIG.PARTICLE.COUNT = Number(value);
+                // 既存のパーティクルを削除
+                this.particleSystem.particles.forEach((particle) => particle.dispose());
+                this.particleSystem.particles = [];
+                // 新しい数でパーティクルを再生成
+                this.particleSystem.createParticles();
+              },
+            },
+            パーティクルサイズ: {
+              min: 0.5,
+              max: 2,
+              current: CONFIG.PARTICLE.BASE_SIZE,
+              tooltip: "パーティクルの基本サイズを設定します",
+              onChange: (value) => {
+                CONFIG.PARTICLE.BASE_SIZE = Number(value);
+                this.particleSystem.updateParticleSizes();
+              },
+            },
+            最小相互作用距離: {
+              min: 0.05,
+              max: 1,
+              current: CONFIG.PARTICLE.MIN_INTERACTION_DISTANCE,
+              tooltip: "パーティクル間の最小相互作用距離",
+              onChange: (value) => (CONFIG.PARTICLE.MIN_INTERACTION_DISTANCE = Number(value)),
+            },
+            最大相互作用距離: {
+              min: 20,
+              max: 100,
+              current: CONFIG.PARTICLE.MAX_INTERACTION_DISTANCE,
+              tooltip: "パーティクル間の最大相互作用距離",
+              onChange: (value) => (CONFIG.PARTICLE.MAX_INTERACTION_DISTANCE = Number(value)),
+            },
+            距離減衰係数: {
+              min: 0.5,
+              max: 2,
+              current: CONFIG.PARTICLE.STRENGTH_FACTOR_POWER,
+              tooltip: "距離による力の減衰の強さ",
+              onChange: (value) => (CONFIG.PARTICLE.STRENGTH_FACTOR_POWER = Number(value)),
+            },
+            力の強さ: {
+              min: 0.001,
+              max: 0.05,
+              current: CONFIG.PARTICLE.FORCE_MAGNITUDE,
+              tooltip: "パーティクル間の相互作用の強さ",
+              onChange: (value) => (CONFIG.PARTICLE.FORCE_MAGNITUDE = Number(value)),
+            },
+            速度減衰: {
+              min: 0.9,
+              max: 0.999,
+              current: CONFIG.PARTICLE.VELOCITY_DECAY,
+              tooltip: "パーティクルの運動の減衰率",
+              onChange: (value) => (CONFIG.PARTICLE.VELOCITY_DECAY = Number(value)),
+            },
+            ランダム力: {
+              min: 0,
+              max: 0.5,
+              current: CONFIG.PARTICLE.RANDOM_FORCE,
+              tooltip: "パーティクルにかかるランダムな力の大きさ",
+              onChange: (value) => (CONFIG.PARTICLE.RANDOM_FORCE = Number(value)),
+            },
+          });
+
+          // Sonification設定グループを追加
+          this.createParameterGroup(globalParams, "Sonification設定", {
+            "基本周波数 (赤)": {
+              min: 10,
+              max: 400,
+              step: 1,
+              current: CONFIG.AUDIO.FREQUENCIES.red,
+              tooltip: "赤パーティクルの基本周波数",
+              onChange: (value) => {
+                CONFIG.AUDIO.FREQUENCIES.red = Number(value);
+                if (this.audioManager.oscillators.red) {
+                  this.audioManager.oscillators.red.frequency.setValueAtTime(
+                    value,
+                    this.audioManager.context.currentTime
+                  );
+                }
+              },
+            },
+            "基本周波数 (緑)": {
+              min: 10,
+              max: 400,
+              step: 1,
+              current: CONFIG.AUDIO.FREQUENCIES.green,
+              tooltip: "緑パーティクルの基本周波数",
+              onChange: (value) => {
+                CONFIG.AUDIO.FREQUENCIES.green = Number(value);
+                if (this.audioManager.oscillators.green) {
+                  this.audioManager.oscillators.green.frequency.setValueAtTime(
+                    value,
+                    this.audioManager.context.currentTime
+                  );
+                }
+              },
+            },
+            "基本周波数 (青)": {
+              min: 10,
+              max: 400,
+              current: CONFIG.AUDIO.FREQUENCIES.blue,
+              step: 1,
+              tooltip: "青パーティクルの基本周波数",
+              onChange: (value) => {
+                CONFIG.AUDIO.FREQUENCIES.blue = Number(value);
+                if (this.audioManager.oscillators.blue) {
+                  this.audioManager.oscillators.blue.frequency.setValueAtTime(
+                    value,
+                    this.audioManager.context.currentTime
+                  );
+                }
+              },
+            },
+            周波数変化範囲: {
+              min: 0,
+              max: 1000,
+              current: CONFIG.AUDIO.SONIFICATION.FREQUENCY_RANGE,
+              tooltip: "エネルギーによる周波数の変化範囲",
+              onChange: (value) => (CONFIG.AUDIO.SONIFICATION.FREQUENCY_RANGE = Number(value)),
+            },
+            "エネルギー→周波数影響度": {
+              min: 0,
+              max: 10,
+              current: CONFIG.AUDIO.SONIFICATION.ENERGY_TO_FREQUENCY,
+              tooltip: "エネルギーが周波数に与える影響の強さ",
+              onChange: (value) => (CONFIG.AUDIO.SONIFICATION.ENERGY_TO_FREQUENCY = Number(value)),
+            },
+            "エネルギー→音量影響度": {
+              min: 0,
+              max: 2,
+              current: CONFIG.AUDIO.SONIFICATION.ENERGY_TO_VOLUME,
+              tooltip: "エネルギーが音量に与える影響の強さ",
+              onChange: (value) => (CONFIG.AUDIO.SONIFICATION.ENERGY_TO_VOLUME = Number(value)),
+            },
+          });
+
+          // パーティクルタイプごとの設定
+          const typeColors = {
+            red: { name: "赤粒子", class: "red-type" },
+            green: { name: "緑粒子", class: "green-type" },
+            blue: { name: "青粒子", class: "blue-type" },
+          };
+
+          Object.entries(PARTICLE_TYPES).forEach(([type, config]) => {
+            const typeInfo = typeColors[type];
+            const interactionParams = {};
+
+            Object.entries(config.interactions).forEach(([targetType, interaction]) => {
+              const targetTypeInfo = typeColors[targetType];
+
+              interactionParams[`${targetTypeInfo.name}との相互作用距離`] = {
+                min: 5,
+                max: 50,
+                current: interaction.base,
+                tooltip: `${typeInfo.name}と${targetTypeInfo.name}の間の相互作用が発生する距離`,
+                onChange: (value) => (config.interactions[targetType].base = Number(value)),
+              };
+            });
+
+            this.createParameterGroup(
+              particleParams,
+              typeInfo.name,
+              interactionParams,
+              typeInfo.class
+            );
+          });
+
+          const randomizeButton = document.getElementById("randomizeButton");
+          randomizeButton.addEventListener("click", () => {
+            this.randomizeInteractions();
+          });
+
+          // 音量スライダーの制御を追加
+          const volumeSlider = document.getElementById("volumeSlider");
+
+          volumeSlider.addEventListener("input", (e) => {
+            const numValue = Number(e.target.value);
+            if (numValue >= 0 && numValue <= 0.5) {
+              this.audioManager.setMasterVolume(numValue);
+            }
+          });
+        }
+
+        // パラメーターグループを作成するヘルパーメソッド
+        createParameterGroup(parent, title, parameters, typeClass = "") {
+          const group = document.createElement("div");
+          group.className = `parameter-group ${typeClass}`;
+
+          const header = document.createElement("div");
+          header.className = "group-header";
+          header.innerHTML = `
+          <h3 class="group-title">${title}</h3>
+          <span class="collapse-icon">▼</span>
+        `;
+
+          const content = document.createElement("div");
+          content.className = "content";
+
+          header.addEventListener("click", () => {
+            group.classList.toggle("collapsed");
+            header.classList.toggle("collapsed");
+          });
+
+          group.appendChild(header);
+          group.appendChild(content);
+
+          Object.entries(parameters).forEach(([name, config]) => {
+            const row = this.createParameterRow(name, config);
+            content.appendChild(row);
+          });
+
+          parent.appendChild(group);
+        }
+
+        // パラメーター行を作成するヘルパーメソッド
+        createParameterRow(name, config) {
+          const row = document.createElement("div");
+          row.className = "parameter-row tooltip";
+
+          const label = document.createElement("label");
+          label.className = "parameter-label";
+          label.textContent = name;
+
+          if (config.tooltip) {
+            const tooltip = document.createElement("span");
+            tooltip.className = "tooltip-text";
+            tooltip.textContent = config.tooltip;
+            label.appendChild(tooltip);
+          }
+
+          const controls = document.createElement("div");
+          controls.className = "slider-container";
+
+          const slider = document.createElement("input");
+          slider.type = "range";
+          slider.min = config.min;
+          slider.max = config.max;
+          slider.step = config.step || (config.max - config.min) / 1000; // stepが指定されていない場合は従来通り
+          slider.value = config.current;
+
+          const input = document.createElement("input");
+          input.type = "number";
+          input.className = "parameter-input";
+          input.value = Number(config.current).toFixed(config.step ? 0 : 3); // stepが指定されている場合は小数点以下を表示しない
+          input.min = config.min;
+          input.max = config.max;
+          input.step = slider.step;
+
+          const updateValue = (value) => {
+            const numValue = Number(value);
+            if (numValue >= config.min && numValue <= config.max) {
+              slider.value = numValue;
+              input.value = numValue.toFixed(config.step ? 0 : 3);
+              config.onChange(numValue);
+            }
+          };
+
+          slider.addEventListener("input", (e) => updateValue(e.target.value));
+          input.addEventListener("change", (e) => updateValue(e.target.value));
+
+          controls.appendChild(slider);
+          controls.appendChild(input);
+
+          row.appendChild(label);
+          row.appendChild(controls);
+
+          return row;
+        }
+
+        randomizeInteractions() {
+          Object.values(PARTICLE_TYPES).forEach((typeConfig) => {
+            Object.values(typeConfig.interactions).forEach((interaction) => {
+              interaction.base = Math.random() * 30 + 10; // 10から40の間ランダム
+              interaction.range = Math.random() * 15 + 5; // 5から20の間でランダム
+            });
+          });
+
+          // GUI上の値を更新
+          const particleParams = document.getElementById("particleParams");
+          const sliders = particleParams.querySelectorAll('input[type="range"]');
+          const inputs = particleParams.querySelectorAll('input[type="number"]');
+
+          sliders.forEach((slider, index) => {
+            const value =
+              PARTICLE_TYPES[Object.keys(PARTICLE_TYPES)[Math.floor(index / 3)]].interactions[
+                Object.keys(PARTICLE_TYPES)[index % 3]
+              ].base;
+            slider.value = value;
+            inputs[index].value = value.toFixed(3);
+          });
+        }
+      }
+
+      // アプリケーションの起動
+      const app = new ParticleLifeApp();
+    </script>
+  </body>
+</html>
